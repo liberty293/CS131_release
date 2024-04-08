@@ -46,13 +46,29 @@ def harris_corners(img, window_size=3, k=0.04):
     ### YOUR CODE HERE
     pass
     # 2. Compute products of derivatives (I_x^2, I_y^2, I_xy) at each pixel
-    
+    Ix2 = dx**2
+    Iy2 = dy**2
+    Ixy = dx*dy
     
     # 3. Compute matrix M at each pixel
     
-
-    # 4. Compute corner response R=Det(M) - k*(Trace(M)^2) at each pixel
+    M = np.array([[convolve(Ix2, window, mode='constant', cval=0),convolve(Ixy, window, mode='constant', cval=0)],
+                 [convolve(Ixy, window, mode='constant', cval=0),convolve(Iy2, window, mode='constant', cval=0)]])
     
+    #print(img.shape)
+    #print(H)
+    #print(M.shape)
+    # 4. Compute corner response R=Det(M) - k*(Trace(M)^2) at each pixel
+    det = np.zeros((H,W))
+    trace = np.zeros((H,W))
+
+    for i in range(H):
+        for j in range(W):
+            M_pixel = M[:, :, i, j]
+            det[i, j] = np.linalg.det(M_pixel)
+            trace[i,j] = np.trace(M_pixel)
+
+    response = det - k*(trace**2)
     
     ### END YOUR CODE
 
@@ -78,7 +94,12 @@ def simple_descriptor(patch):
         feature: 1D array of shape (H * W)
     """
     feature = []
-    ### YOUR CODE HERE
+    mean = np.mean(patch)
+    std = np.std(patch)
+    if(std != 0):
+        feature = (patch - mean) / std
+    else:
+        feature = patch-mean
     if patch.std() == 0:
         feature = (patch - patch.mean()).flatten()
     else:
@@ -134,10 +155,18 @@ def match_descriptors(desc1, desc2, threshold=0.5):
     matches = []
 
     M = desc1.shape[0]
+
     dists = cdist(desc1, desc2)
 
     ### YOUR CODE HERE
-    pass
+    for index, row in enumerate(dists): #iterate across all distances in desc1
+        sorted = np.sort(row)
+        if(sorted[0]/sorted[1] < threshold): #check if it is strictly smaller
+            min_col = np.argmin(row) #get the min index
+            matches.append([index, min_col]) #add it as a match
+
+    matches = np.asanyarray(matches)
+
     ### END YOUR CODE
 
     return matches
@@ -166,16 +195,17 @@ def fit_affine_matrix(p1, p2):
 
     assert (p1.shape[0] == p2.shape[0]),\
         'Different number of points in p1 and p2'
-    p1 = pad(p1)
+    p1 = pad(p1) #convert to homogeneous
     p2 = pad(p2)
 
     ### YOUR CODE HERE
-    pass
+    H, _,_,_ = np.linalg.lstsq(p2,p1,rcond=None)
     ### END YOUR CODE
 
     # Sometimes numerical issues cause least-squares to produce the last
     # column which is not exactly [0, 0, 1]
     H[:,2] = np.array([0, 0, 1])
+
     return H
 
 
@@ -219,15 +249,19 @@ def ransac(keypoints1, keypoints2, matches, n_iters=200, threshold=20):
     matches = matches.copy()
 
     N = matches.shape[0]
-    n_samples = int(N * 0.2)
 
-    matched1 = pad(keypoints1[matches[:,0]])
-    matched2 = pad(keypoints2[matches[:,1]])
+    n_samples = int(N * 0.2) #take 20 percent of the matches
+
+    matched1 = pad(keypoints1[matches[:,0]]) #keypoints of image1 with a match
+    matched2 = pad(keypoints2[matches[:,1]]) #keypoints of image2 with a match
 
     max_inliers = np.zeros(N, dtype=bool)
+    s_max_inliers = np.zeros(N, dtype=bool)
     n_inliers = 0
 
+    H   , _,_,_ = np.linalg.lstsq(matched2, matched1,rcond=None)
     # RANSAC iteration start
+
 
     # Note: while there're many ways to do random sampling, we use
     # `np.random.shuffle()` followed by slicing out the first `n_samples`
@@ -241,8 +275,32 @@ def ransac(keypoints1, keypoints2, matches, n_iters=200, threshold=20):
         sample2 = pad(keypoints2[samples[:,1]])
     
     ### YOUR CODE HERE
-    pass
+    #2. compute affline transformation
+        Hsamp, _,_,_ = np.linalg.lstsq(sample2, sample1,rcond=None)
+    #3. Compute inliers via Euclidean distance
+        transformed_point = np.dot(matched2, Hsamp)
+
+ 
+        pt2match = unpad(transformed_point)  #get nonhomo part
+        pt1match = unpad(matched1)
+        dist = np.sqrt((pt2match[:,0]-pt1match[:,0])**2+(pt2match[:,1]-pt1match[:,1])**2)
+        #print(pt2match)
+        #print(dist)
+        for j in range(N):
+            #print(dist.shape)
+            s_max_inliers[j] = dist[j]<threshold
+        if(n_inliers < np.sum(s_max_inliers)):
+            #5. Re-compute least-squares estimate on all of the inliers
+            max_inliers = s_max_inliers.copy()
+            
+            H = fit_affine_matrix(unpad(matched1[max_inliers,:]), unpad(matched2[max_inliers,:]))
+            n_inliers = np.sum(max_inliers)
+        
+            #print(dist[j])
+
     ### END YOUR CODE
+    #print(max_inliers)
+    #print(orig_matches[max_inliers])
     return H, orig_matches[max_inliers]
 
 
@@ -276,7 +334,28 @@ def linear_blend(img1_warped, img2_warped):
     left_margin = np.argmax(img2_mask[out_H//2, :].reshape(1, out_W), 1)[0]
 
     ### YOUR CODE HERE
-    pass
+    weight1 = np.linspace(1,1,left_margin)
+    weight1 = np.append(weight1, np.linspace(1,0,right_margin-left_margin))
+    weight1 = np.append(weight1, np.linspace(0,0,out_W-right_margin))
+    weight1 = np.tile(weight1, (out_H,1))
+
+    weight2 = np.linspace(0,0,left_margin)
+    weight2 = np.append(weight2, np.linspace(0,1,right_margin-left_margin))
+    weight2 = np.append(weight2, np.linspace(1,1,out_W - right_margin))
+    weight2 = np.tile(weight2,(out_H,1))
+    #print(weight2.shape)
+    #print(img2_warped.shape)
+
+    #now merge images together
+    # Merge the two images
+    merged = img1_warped * weight1 + img2_warped * weight2  
+
+    # Track the overlap by adding the masks together
+    overlap = (img1_mask * 1.0 +  # Multiply by 1.0 for bool -> float conversion
+           img2_mask)
+
+    # Normalize through division by `overlap` - but ensure the minimum is 1
+    normalized = merged / np.maximum(overlap, 1)
     ### END YOUR CODE
 
     return merged
@@ -316,8 +395,101 @@ def stitch_multiple_images(imgs, desc_func=simple_descriptor, patch_size=5):
         mtchs = match_descriptors(descriptors[i], descriptors[i+1], 0.7)
         matches.append(mtchs)
 
+    #H = np.zeros((4,3,3))
+
+
     ### YOUR CODE HERE
-    pass
+    #get Hs
+    H = np.zeros((len(imgs)-1,3,3))
+
+    for i in range(len(imgs)-1):
+        H[i], _ = ransac(keypoints[i], keypoints[i+1],matches[i])
+    Htot = []
+    Htot.append( H[0])
+    for i in range(len(H)-1):
+        Htot.append(np.dot(H[i+1],Htot[i]))
+
+
+    previmg = imgs[0]
+    nextimg = []
+    #let's stitch!
+    # for i in range(len(imgs)-1):
+    #     imgH = H[0]
+    #     for j in range(i):
+    #         imgH *= H[j]
+    #     output_shape, offset = get_output_space(imgs[0], [imgs[i+1]], [imgH])
+    #     imgswarp.append(warp_image(imgs[i], np.eye(3), output_shape, offset))
+    #     imgsmask[i] = (imgswarp[i] != -1) # Mask == 1 inside the image
+    #     imgswarp[~imgsmask[i]] = 0     # Return background values to 0
+
+    #     imgswarp[i+1] = warp_image(imgs[i+1], H, output_shape, offset)
+    #     imgsmask[i+1] = (imgswarp[i+1] != -1) # Mask == 1 inside the image
+    #     imgswarp[i+1][~imgsmask[i+1]] = 0     # Return background values to 0
+
+#     #for i in range(3):
+#     imgH_shape = []
+# #       if(i == 1):
+#     imgH1 = np.dot(H[0], H[1])
+# #        if(i == 2):
+#     imgH2 = np.matmul(np.dot(H[0], H[1]),H[2])
+# #   print(imgH2)
+    
+#     imgH_shape.append(H[0])
+#     for i in range(len(imgs)-2):
+#             imgH_shape.append(np.dot(imgH_shape[i], H[i+1]))
+    imgH = []
+    img = []
+    img_mask = []
+    out_size, offsets = get_output_space(imgs[0],imgs[1:],Htot)
+    img.append(warp_image(imgs[0], np.eye(3), out_size, offsets))
+    img_mask.append(img[0] != -1)
+    img[0][~img_mask[0]] = 0
+    merged = img[0]
+    overlap = img_mask[0]*1.0
+
+    for i in range(len(imgs)-1):
+        imgH = H[0]
+        for j in range(i):
+            imgH = np.dot(H[j+1],imgH)
+        img.append(warp_image(imgs[i+1], imgH, out_size, offsets))
+        img_mask.append((img[i+1] != -1))
+        img[i+1][~img_mask[i+1]] = 0
+        merged += img[i+1]
+        overlap += img_mask[i+1]
+        # print(i)
+    
+    
+    normalized = merged / np.maximum(overlap, 1)
+    previmg = normalized
+
+
+    # out_size, offsets = get_output_space(imgs[0],[imgs[3]],[imgH2])
+    # img1 = warp_image(imgs[0],np.eye(3),out_size,offsets)
+    # img2 = warp_image(imgs[1],imgH0,out_size,offsets)
+    # img3 = warp_image(imgs[2],imgH1,out_size,offsets)
+    # img4 = warp_image(imgs[3],imgH2,out_size,offsets)
+
+    # img1_mask = (img1 != -1) # Mask == 1 inside the image
+    # img1[~img1_mask] = 0     # Return background values to 0
+
+    # img2_mask = (img2 != -1) # Mask == 1 inside the image
+    # img2[~img2_mask] = 0     # Return background values to 0
+    # img3_mask = (img3 != -1) # Mask == 1 inside the image
+    # img3[~img3_mask] = 0     # Return background values to 0
+
+    # img4_mask = (img4 != -1) # Mask == 1 inside the image
+    # img4[~img4_mask] = 0     # Return background values to 0
+    # merged = img1+img2+img3+img4
+    # # Track the overlap by adding the masks together
+    # overlap = (img1_mask * 1.0 +  # Multiply by 1.0 for bool -> float conversion
+    # img2_mask+img3_mask+img4_mask)
+
+    # # Normalize through division by `overlap` - but ensure the minimum is 1
+    # normalized = merged / np.maximum(overlap, 1)
+    # previmg = normalized
+
+
+    panorama = previmg
     ### END YOUR CODE
 
     return panorama

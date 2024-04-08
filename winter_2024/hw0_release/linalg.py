@@ -14,9 +14,16 @@ def dot_product(a, b):
     Returns:
         out: numpy array of shape (x, x) (scalar if x = 1)
     """
-    out = None
+    
+    if(a.ndim == 1):
+        return np.dot(a,b)
+
     ### YOUR CODE HERE
-    pass
+    out = np.zeros((a.shape[0], b.shape[1]))
+    out = np.dot(a,b)
+#     for i in range(a.shape[0]):
+#         for j in range(b.shape[1]):
+#             out[i,j] = np.dot(a[i, :], b[:,j])
     ### END YOUR CODE
     return out
 
@@ -36,8 +43,9 @@ def complicated_matrix_function(M, a, b):
         out: numpy matrix of shape (x, 1).
     """
     out = None
-    ### YOUR CODE HERE
-    pass
+    ab = dot_product(a,b)
+    mat = dot_product(M,a.T)
+    out = ab*mat
     ### END YOUR CODE
 
     return out
@@ -55,10 +63,12 @@ def eigen_decomp(M):
         w: numpy array of shape (m,) such that the column v[:,i] is the eigenvector corresponding to the eigenvalue w[i].
         v: Matrix where every column is an eigenvector.
     """
-    w = None
-    v = None
+    w, v = np.linalg.eig(M)
+    
+
+    
     ### YOUR CODE HERE
-    pass
+
     ### END YOUR CODE
     return w, v
 
@@ -86,10 +96,12 @@ def euclidean_distance_native(u, v):
     #     input arrays. Then, we want to square these differences.
     #     Finally, we want to sum the squares and square root the
     #     sum.
-
+    sums = 0;
     ### YOUR CODE HERE
-    pass
+    for i in range(len(u)):
+        sums += (v[i]-u[i])**2
     ### END YOUR CODE
+    return sums ** .5
 
 
 def euclidean_distance_numpy(u, v):
@@ -120,7 +132,8 @@ def euclidean_distance_numpy(u, v):
     #     sum.
 
     ### YOUR CODE HERE
-    pass
+    sums = np.sum((v-u)**2)
+    return np.sqrt(sums)
     ### END YOUR CODE
 
 
@@ -141,8 +154,11 @@ def get_eigen_values_and_vectors(M, k):
         eigenvectors: list of length k containing the top k eigenvectors
             of shape (m,)
     """
-    eigenvalues = []
-    eigenvectors = []
+    vals,vecs = eigen_decomp(M)
+    absval = np.abs(vals)
+    indexes = np.argsort(absval)[::-1] #sorting greatest to least
+    eigenvalues = vals[indexes[:k]].tolist()
+    eigenvectors = vecs[:,indexes[:k]].T
     ### YOUR CODE HERE
     pass
     ### END YOUR CODE

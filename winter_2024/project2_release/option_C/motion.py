@@ -48,7 +48,30 @@ def lucas_kanade(img1, img2, keypoints, window_size=5):
         y, x = int(round(y)), int(round(x))
 
         ### YOUR CODE HERE
-        pass
+
+        #find window
+        Ix_window = Ix[y-w:y+w+1, x-w:x+w+1]
+        Iy_window = Iy[y-w:y+w+1, x-w:x+w+1]
+        It_window = It[y-w:y+w+1, x-w:x+w+1]
+
+        # Compute sums
+        sum_Ixx = np.sum(Ix_window * Ix_window)
+        sum_Iyy = np.sum(Iy_window * Iy_window)
+        sum_Ixy = np.sum(Ix_window * Iy_window)
+        sum_Ixt = np.sum(Ix_window * It_window)
+        sum_Iyt = np.sum(Iy_window * It_window)
+
+        #make M
+        M = [[sum_Ixx, sum_Ixy],[sum_Ixy, sum_Iyy]]
+        b = [[-sum_Ixt], [-sum_Iyt]]
+       # print(np.dot(np.linalg.inv(M),b).flatten())
+        myvecs = np.dot(np.linalg.inv(np.array(M)),np.array(b)).flatten()
+        flow_vectors.append([myvecs[1],myvecs[0]])
+        vals,vecs = np.linalg.eig(np.array(M))
+        #absval = np.abs(vals)
+        indexes = np.argsort(vals)[::-1] #sorting greatest to least
+        #flow_vectors.append(vecs[:,indexes[0]])
+        #flow_vectors.append(vecs[:,0].T)
         ### END YOUR CODE
 
     flow_vectors = np.array(flow_vectors)
@@ -92,7 +115,17 @@ def iterative_lucas_kanade(img1, img2, keypoints, window_size=9, num_iters=7, g=
 
         # TODO: Compute inverse of G at point (x1, y1)
         ### YOUR CODE HERE
-        pass
+        Ix_window = Ix[y1-w:y1+w+1, x1-w:x1+w+1]
+        Iy_window = Iy[y1-w:y1+w+1, x1-w:x1+w+1]
+
+        # Compute sums
+        sum_Ixx = np.sum(Ix_window * Ix_window)
+        sum_Iyy = np.sum(Iy_window * Iy_window)
+        sum_Ixy = np.sum(Ix_window * Iy_window)
+  
+
+        #make G
+        G = [[sum_Ixx, sum_Ixy],[sum_Ixy, sum_Iyy]]
         ### END YOUR CODE
 
         # Iteratively update flow vector
@@ -104,7 +137,11 @@ def iterative_lucas_kanade(img1, img2, keypoints, window_size=9, num_iters=7, g=
 
             # TODO: Compute bk and vk = inv(G) x bk
             ### YOUR CODE HERE
-            pass
+            Ik_window = img1[y1-w:y1+w+1, x1-w:x1+w+1] - img2[y2-w:y2+w+1, x2-w:x2+w+1]
+            sum_Ixk = np.sum(Ix_window * Ik_window)
+            sum_Iyk = np.sum(Iy_window * Ik_window)
+            bk = [[sum_Ixk], [sum_Iyk]]
+            vk = np.dot(np.linalg.inv(np.array(G)),np.array(bk)).flatten()
             ### END YOUR CODE
 
             # Update flow vector by vk
@@ -142,12 +179,18 @@ def pyramid_lucas_kanade(
 
     # Initialize pyramidal guess
     g = np.zeros(keypoints.shape)
-
     for L in range(level, -1, -1):
         ### YOUR CODE HERE
         pass
+        s = scale**L
+       # print(L)
+        pL = keypoints/(s)
+        #print(pL[0])
+        d = iterative_lucas_kanade(pyramid1[L],pyramid2[L],pL,g=g)
+        #print(d[0])
+        if(L != 0):
+            g = scale*(g+d)
         ### END YOUR CODE
-
     d = g + d
     return d
 
@@ -167,7 +210,15 @@ def compute_error(patch1, patch2):
     assert patch1.shape == patch2.shape, "Different patch shapes"
     error = 0
     ### YOUR CODE HERE
-    pass
+    #find the z score
+    p1mean = np.mean(patch1)
+    p2mean = np.mean(patch2)
+    p1std = np.std(patch1)
+    p2std = np.std(patch2)
+    p1z = (patch1-p1mean)/p1std
+    p2z = (patch2-p2mean)/p2std
+    error = np.mean((p1z - p2z)**2)
+
     ### END YOUR CODE
     return error
 
@@ -258,7 +309,35 @@ def IoU(bbox1, bbox2):
     score = 0
 
     ### YOUR CODE HERE
-    pass
+    #intersection dimensions
+    bbox = [bbox1, bbox2]
+    sortx = np.argsort([x1,x2]) 
+    if(bbox[sortx[0]][0]+ bbox[sortx[0]][2] < bbox[sortx[1]][0]):
+        return 0
+    sortx = np.argsort([y1,y2]) 
+    if(bbox[sortx[0]][1]+ bbox[sortx[0]][3] < bbox[sortx[1]][1]):
+        return 0
+    
+    xi = max(x1,x2)
+    yi = max(y1, y2)
+    x2i = min(x2+w2,x1+w1)
+    y2i = min(y2+h2, y1+h1)
+    intersec = (x2i-xi)*(y2i-yi)
+    if(intersec <0):
+        # print(y1, y2, h1, h2)
+        # print(x1, x2, w1, w2)
+        return 0
+
+    #find areas (area of both - intersection)
+    a1 = w1*h1
+    a2 = w2*h2
+    atot = a1+a2-intersec
+    score = intersec/atot
+
+    if(score)>1:
+        print(y1, y2, h1, h2)
+        print(x1, x2, w1, w2)
+        print(score)
     ### END YOUR CODE
 
     return score

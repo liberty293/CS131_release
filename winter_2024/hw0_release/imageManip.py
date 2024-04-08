@@ -20,7 +20,7 @@ def load(image_path):
 
     ### YOUR CODE HERE
     # Use skimage io.imread
-    pass
+    out = io.imread(image_path)
     ### END YOUR CODE
 
     # Let's convert the image to be between the correct range.
@@ -44,8 +44,8 @@ def crop_image(image, start_row, start_col, num_rows, num_cols):
 
     out = None
 
-    ### YOUR CODE HERE
-    pass
+    out = image[start_row:start_row+num_rows, start_col:start_col+num_cols, :]
+
     ### END YOUR CODE
 
     return out
@@ -68,7 +68,7 @@ def dim_image(image):
     out = None
 
     ### YOUR CODE HERE
-    pass
+    out = (image)**2*.5
     ### END YOUR CODE
 
     return out
@@ -96,7 +96,11 @@ def resize_image(input_image, output_rows, output_cols):
     #    > This should require two nested for loops!
 
     ### YOUR CODE HERE
-    pass
+    scale_r = input_rows/output_rows #i decrease by this
+    scale_c = input_cols/output_cols
+    for i in range(output_rows):
+        for j in range(output_cols):          
+            output_image[i,j,:] = input_image[int(i*scale_r), int(j*scale_c),:]
     ### END YOUR CODE
 
     # 3. Return the output image
@@ -119,7 +123,9 @@ def rotate2d(point, theta):
     # Reminder: np.cos() and np.sin() will be useful here!
 
     ## YOUR CODE HERE
-    pass
+    R = np.array([[np.cos(theta), -np.sin(theta)],[np.sin(theta),np.cos(theta)]])
+
+    return  R@point
     ### END YOUR CODE
 
 
@@ -136,12 +142,25 @@ def rotate_image(input_image, theta):
     """
     input_rows, input_cols, channels = input_image.shape
     assert channels == 3
-
+    center = np.array([int(input_rows/2),int(input_cols/2)])
+    R = np.array([[np.cos(theta), -np.sin(theta),0],[np.sin(theta),np.cos(theta),0],[0,0,1]])
     # 1. Create an output image with the same shape as the input
     output_image = np.zeros_like(input_image)
-
+    
     ## YOUR CODE HERE
-    pass
+    for i in range(input_rows):
+        for j in range(input_cols):     
+            T = np.array([[1, 0, -center[0]],
+                          [0,1,-center[1]],
+                          [0,0,1]])
+            new_index = np.linalg.inv(T)@R@T@np.array([i,j,1]).T
+            
+            if 0 <= new_index[0] <= input_rows and 0 <= new_index[1] <= input_cols:
+                
+                output_image[i,j,:] = input_image[int(new_index[0]), int(new_index[1]),:]
+            else:
+                pass
+            
     ### END YOUR CODE
 
     # 3. Return the output image
